@@ -1,5 +1,5 @@
-import { MainScreen } from "./MainScreen";
+import { Game } from './components/GameWrapper';
 
 export default function Home() {
-  return <MainScreen />;
+  return <Game />;
 }
