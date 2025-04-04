@@ -648,7 +648,7 @@ function EldenAtmosphere() {
 }
 
 // Scene component that combines all elements
-function EldenRingScene() {
+export function EldenRingScene() {
   return (
     <>
       {/* Use an HDR environment map for high-quality lighting and reflections */}
@@ -786,12 +786,7 @@ function EldenRingScene() {
       <Rock position={[18, 0, -35]} scale={0.6} variant={1} />
       
       {/* Controls */}
-      <OrbitControls 
-        enableZoom={true}
-        enablePan={true}
-        minPolarAngle={Math.PI / 6}
-        maxPolarAngle={Math.PI / 2.2} 
-      />
+      {/* Removed OrbitControls so they don't conflict with character controls */}
       
       {/* Enhanced AAA-quality post-processing effects */}
       <EffectComposer multisampling={8} stencilBuffer={true}>
@@ -845,6 +840,8 @@ function EldenRingScene() {
   );
 }
 
+// We now directly export EldenRingScene instead of wrapping it
+// The MainScreen function is kept for backwards compatibility
 export function MainScreen() {
   return (
     <div style={{ width: '100vw', height: '100vh' }}>
