@@ -12,6 +12,7 @@ import { Skybox } from './Skybox';
 import { Background } from './Background';
 import { HUD } from './HUD';
 import { DebugInfo, CollisionSpheres } from './DebugInfo';
+import { GameOverSplash } from './GameOverSplash';
 
 // Main game scene
 function GameScene() {
@@ -68,6 +69,7 @@ export function Game() {
         <HUD />
         <DebugInfo />
         <GameScene />
+        <GameOverSplash />
       </div>
     </GameStateProvider>
   );
