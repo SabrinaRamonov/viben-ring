@@ -479,8 +479,10 @@ export function Character() {
     };
   }, []);
   
+  // We already have the game state from the hook at the top of the component
+  
   // Update character position and animations based on movement input
-  useFrame((state, delta) => {
+  useFrame((_, delta) => {
     if (!characterRef.current) return;
     
     // Update animation mixer - this is critical for animations to play
@@ -545,40 +547,71 @@ export function Character() {
         }
       }
       
-      // Calculate movement based on input with different speeds for different directions
+      // Calculate movement based on camera direction
       const forwardSpeed = speed;            // Normal speed for forward movement
       const backwardSpeed = speed * 0.6;     // 60% speed for backward movement
       const strafeSpeed = speed * 0.7;       // 70% speed for left/right movement
       
-      if (movementRef.current.forward) position.z += forwardSpeed;  // Forward is +Z (full speed)
-      if (movementRef.current.backward) position.z -= backwardSpeed; // Backward is -Z (slower)
-      if (movementRef.current.left) position.x += strafeSpeed;     // Left is +X (slower)
-      if (movementRef.current.right) position.x -= strafeSpeed;    // Right is -X (slower)
+      // Get current camera rotation from game state
+      const cameraRotation = state.cameraRotation;
       
-      // Calculate rotation based on movement direction
+      // Create movement vector based on input and camera direction
+      const moveVector = new THREE.Vector3(0, 0, 0);
+      
+      // Calculate forward/backward movement (along camera's Z axis)
+      if (movementRef.current.forward) {
+        const forward = new THREE.Vector3(0, 0, forwardSpeed);
+        forward.applyEuler(new THREE.Euler(0, cameraRotation.y, 0));
+        moveVector.add(forward);
+      }
+      if (movementRef.current.backward) {
+        const backward = new THREE.Vector3(0, 0, -backwardSpeed);
+        backward.applyEuler(new THREE.Euler(0, cameraRotation.y, 0));
+        moveVector.add(backward);
+      }
+      
+      // Calculate left/right movement (along camera's X axis)
+      if (movementRef.current.left) {
+        const left = new THREE.Vector3(strafeSpeed, 0, 0);
+        left.applyEuler(new THREE.Euler(0, cameraRotation.y, 0));
+        moveVector.add(left);
+      }
+      if (movementRef.current.right) {
+        const right = new THREE.Vector3(-strafeSpeed, 0, 0);
+        right.applyEuler(new THREE.Euler(0, cameraRotation.y, 0));
+        moveVector.add(right);
+      }
+      
+      // Apply movement vector to position
+      position.add(moveVector);
+      
+      // Get the current player rotation from game state (controlled by camera)
+      const currentRotation = state.playerRotation;
+      
+      // Update character model rotation to match the game state rotation
+      // This ensures the character faces the direction the camera is pointing
+      if (characterRef.current) {
+        characterRef.current.rotation.copy(currentRotation);
+      }
+      
+      // Calculate movement direction relative to camera rotation
+      // This makes WASD controls relative to the camera view, just like in Elden Ring
       if (movementRef.current.forward || movementRef.current.backward || 
           movementRef.current.left || movementRef.current.right) {
-        // Create a direction vector based on movement
-        const direction = new THREE.Vector3(0, 0, 0);
-        if (movementRef.current.forward) direction.z += 1;
-        if (movementRef.current.backward) direction.z -= 1;
-        if (movementRef.current.left) direction.x += 1;
-        if (movementRef.current.right) direction.x -= 1;
+        
+        // Create a direction vector based on movement input
+        const inputDirection = new THREE.Vector3(0, 0, 0);
+        if (movementRef.current.forward) inputDirection.z += 1;  // Forward
+        if (movementRef.current.backward) inputDirection.z -= 1; // Backward
+        if (movementRef.current.left) inputDirection.x += 1;    // Left
+        if (movementRef.current.right) inputDirection.x -= 1;   // Right
         
         // Normalize the direction vector
-        direction.normalize();
+        inputDirection.normalize();
         
-        // Calculate the angle from the direction vector
-        const angle = Math.atan2(direction.x, direction.z);
-        
-        // Create a new rotation with the calculated angle
-        const newRotation = new THREE.Euler(0, angle, 0);
-        
-        // Update character rotation
-        characterRef.current.rotation.copy(newRotation);
-        
-        // Update game state with new rotation
-        setPlayerRotation(newRotation);
+        // Apply camera rotation to movement direction
+        // This makes movement relative to camera view
+        inputDirection.applyEuler(new THREE.Euler(0, currentRotation.y, 0));
       }
       
       // Update position

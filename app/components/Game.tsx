@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
 import { GameStateProvider, useGameState } from '../context/GameState';
 import { Arena } from './Arena';
 import { Character } from './Character';
@@ -13,13 +12,17 @@ import { Background } from './Background';
 import { HUD } from './HUD';
 import { DebugInfo, CollisionSpheres } from './DebugInfo';
 import { GameOverSplash } from './GameOverSplash';
+import { ThirdPersonCamera } from './ThirdPersonCamera';
 
 // Main game scene
 function GameScene() {
   const { state } = useGameState();
   
   return (
-    <Canvas camera={{ position: [0, 10, 20], fov: 45 }} shadows>
+    <Canvas camera={{ position: [0, 1.2, -2.5], fov: 60 }} shadows>
+      {/* Third-person camera controller */}
+      <ThirdPersonCamera />
+      
       {/* Scene lighting */}
       <ambientLight intensity={0.3} color="#b9d5ff" />
       <directionalLight 
@@ -54,9 +57,6 @@ function GameScene() {
       
       {/* Debug collision spheres */}
       <CollisionSpheres />
-      
-      {/* Add orbit controls for development */}
-      <OrbitControls />
     </Canvas>
   );
 }

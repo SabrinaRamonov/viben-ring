@@ -21,6 +21,11 @@ declare global {
       bossAttackSphereRadius: number;
       playerHp: number;
       bossHp: number;
+      // Camera parameters
+      cameraOffset: THREE.Vector3;
+      cameraTarget: THREE.Vector3;
+      cameraRotation: THREE.Euler;
+      cameraLookAt: THREE.Vector3;
     };
   }
 }
@@ -44,6 +49,11 @@ export interface GameStateType {
   bossCollisionSphereRadius: number; // Radius of the boss collision sphere
   bossAttackSphereOffset: THREE.Vector3; // Offset of the boss attack sphere relative to boss position
   bossAttackSphereRadius: number; // Radius of the boss attack sphere
+  // Camera parameters
+  cameraOffset: THREE.Vector3; // Offset from player position (third-person view)
+  cameraTarget: THREE.Vector3; // Where the camera is looking at (usually player + some offset)
+  cameraRotation: THREE.Euler; // Camera rotation angles
+  cameraLookAt: THREE.Vector3; // Point that the camera is looking at
   isDebugMode: boolean;
 }
 
@@ -60,6 +70,11 @@ interface GameStateContextType {
   setBossRotation: (rotation: THREE.Euler) => void;
   toggleDebugMode: () => void;
   resetGameState: () => void;
+  // Camera control functions
+  setCameraOffset: (offset: THREE.Vector3) => void;
+  setCameraTarget: (target: THREE.Vector3) => void;
+  setCameraRotation: (rotation: THREE.Euler) => void;
+  setCameraLookAt: (lookAt: THREE.Vector3) => void;
 }
 
 // Default debug mode value (false)
@@ -82,6 +97,11 @@ const defaultGameState: GameStateType = {
   bossCollisionSphereRadius: 1.5, // Larger radius for the boss collision sphere
   bossAttackSphereOffset: new THREE.Vector3(0, 1.5, 10.0), // In front of the boss at blade height
   bossAttackSphereRadius: 1.2, // Radius for the boss attack sphere
+  // Camera parameters - Elden Ring style third-person camera
+  cameraOffset: new THREE.Vector3(0, 1.2, -2.5), // Position camera much closer behind and slightly above player
+  cameraTarget: new THREE.Vector3(0, 1, 0), // Look at player's head/upper torso
+  cameraRotation: new THREE.Euler(0, 0, 0), // Initial camera rotation
+  cameraLookAt: new THREE.Vector3(0, 1, 3), // Look ahead of the player
   isDebugMode: false, // Will be overridden in useState with value from localStorage
 };
 
@@ -113,7 +133,12 @@ export function GameStateProvider({ children }: { children: ReactNode }) {
         bossAttackSphereOffset: new THREE.Vector3(),
         bossAttackSphereRadius: defaultGameState.bossAttackSphereRadius,
         playerHp: defaultGameState.playerHp,
-        bossHp: defaultGameState.bossHp
+        bossHp: defaultGameState.bossHp,
+        // Camera parameters
+        cameraOffset: new THREE.Vector3().copy(defaultGameState.cameraOffset),
+        cameraTarget: new THREE.Vector3().copy(defaultGameState.cameraTarget),
+        cameraRotation: new THREE.Euler().copy(defaultGameState.cameraRotation),
+        cameraLookAt: new THREE.Vector3().copy(defaultGameState.cameraLookAt)
       };
       
       const savedDebugMode = localStorage.getItem('vibenRingDebugMode');
@@ -207,15 +232,51 @@ export function GameStateProvider({ children }: { children: ReactNode }) {
       window.vibenRingGlobalState.bossCollisionSphereRadius = state.bossCollisionSphereRadius;
       window.vibenRingGlobalState.bossAttackSphereOffset.copy(state.bossAttackSphereOffset);
       window.vibenRingGlobalState.bossAttackSphereRadius = state.bossAttackSphereRadius;
+      
+      // Update camera parameters
+      window.vibenRingGlobalState.cameraOffset.copy(state.cameraOffset);
+      window.vibenRingGlobalState.cameraTarget.copy(state.cameraTarget);
+      window.vibenRingGlobalState.cameraRotation.copy(state.cameraRotation);
+      window.vibenRingGlobalState.cameraLookAt.copy(state.cameraLookAt);
     }
   }, [state.playerCollisionSphereOffset, state.playerCollisionSphereRadius, 
       state.playerAttackSphereOffset, state.playerAttackSphereRadius,
       state.bossCollisionSphereOffset, state.bossCollisionSphereRadius,
-      state.bossAttackSphereOffset, state.bossAttackSphereRadius]);
+      state.bossAttackSphereOffset, state.bossAttackSphereRadius,
+      state.cameraOffset, state.cameraTarget, state.cameraRotation, state.cameraLookAt]);
 
   // Reset function
   const resetGameState = () => {
     setState(defaultGameState);
+  };
+
+  // Camera control functions
+  const setCameraOffset = (offset: THREE.Vector3) => {
+    setState(prev => ({ ...prev, cameraOffset: offset }));
+    if (typeof window !== 'undefined' && window.vibenRingGlobalState) {
+      window.vibenRingGlobalState.cameraOffset.copy(offset);
+    }
+  };
+
+  const setCameraTarget = (target: THREE.Vector3) => {
+    setState(prev => ({ ...prev, cameraTarget: target }));
+    if (typeof window !== 'undefined' && window.vibenRingGlobalState) {
+      window.vibenRingGlobalState.cameraTarget.copy(target);
+    }
+  };
+
+  const setCameraRotation = (rotation: THREE.Euler) => {
+    setState(prev => ({ ...prev, cameraRotation: rotation }));
+    if (typeof window !== 'undefined' && window.vibenRingGlobalState) {
+      window.vibenRingGlobalState.cameraRotation.copy(rotation);
+    }
+  };
+
+  const setCameraLookAt = (lookAt: THREE.Vector3) => {
+    setState(prev => ({ ...prev, cameraLookAt: lookAt }));
+    if (typeof window !== 'undefined' && window.vibenRingGlobalState) {
+      window.vibenRingGlobalState.cameraLookAt.copy(lookAt);
+    }
   };
 
   // Value object to be provided by the context
@@ -231,6 +292,11 @@ export function GameStateProvider({ children }: { children: ReactNode }) {
     setBossRotation,
     toggleDebugMode,
     resetGameState,
+    // Camera control functions
+    setCameraOffset,
+    setCameraTarget,
+    setCameraRotation,
+    setCameraLookAt,
   };
 
   return (
