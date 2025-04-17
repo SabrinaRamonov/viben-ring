@@ -69,7 +69,8 @@ export function Character() {
     backward: boolean;
     left: boolean;
     right: boolean;
-  }>({ forward: false, backward: false, left: false, right: false });
+    dodging: boolean;
+  }>({ forward: false, backward: false, left: false, right: false, dodging: false });
   
   const [model, setModel] = useState<THREE.Group | null>(null);
   const [animations, setAnimations] = useState<{[key: string]: THREE.AnimationClip}>({});
@@ -108,14 +109,19 @@ export function Character() {
         const attackAnim = await loadAnimation('/models/character/melee-light.fbx');
         attackAnim.name = 'attack';
         
-        // Store animations
+        // Load dodge/roll animation
+        const dodgeAnim = await loadAnimation('/models/character/roll.fbx');
+        dodgeAnim.name = 'dodge';
+        
+        // Store all animations
         setAnimations({
           idle: idleAnim,
           forward: forwardAnim,
           backward: backwardAnim,
           left: leftAnim,
           right: rightAnim,
-          attack: attackAnim
+          attack: attackAnim,
+          dodge: dodgeAnim
         });
         
         setLoading(false);
@@ -132,7 +138,7 @@ export function Character() {
   // Set up model and animations once loaded
   useEffect(() => {
     if (!model || !animations.idle || !animations.forward || !animations.backward || 
-        !animations.left || !animations.right || !animations.attack || !characterRef.current) return;
+        !animations.left || !animations.right || !animations.attack || !animations.dodge || !characterRef.current) return;
     
     console.log('Setting up character with animations');
     
@@ -181,6 +187,16 @@ export function Character() {
     attackAction.timeScale = 1.5;           // Speed up the animation by 1.5x
     actionsRef.current.attack = attackAction;
     
+    // Create dodge animation action
+    const dodgeAction = mixer.clipAction(animations.dodge);
+    dodgeAction.setLoop(THREE.LoopOnce, 1);  // Play only once
+    dodgeAction.clampWhenFinished = true;    // Hold the last frame until manually reset
+    dodgeAction.zeroSlopeAtEnd = true;      // Ensure smooth transition at the end
+    dodgeAction.zeroSlopeAtStart = true;    // Ensure smooth transition at the start
+    // Set a slower timeScale for a more deliberate dodge
+    dodgeAction.timeScale = 0.8;
+    actionsRef.current.dodge = dodgeAction;
+    
     // Play idle animation by default
     idleAction.play();
     
@@ -198,6 +214,79 @@ export function Character() {
   
   // Reference to track if attack is in progress - defined at component level for useFrame access
   const isAttackingRef = useRef<boolean>(false);
+  const isDodgingRef = useRef<boolean>(false);
+  const dodgeStartTimeRef = useRef<number>(0);
+  const dodgeDurationRef = useRef<number>(0.6); // Increased to 0.6 seconds (50% slower)
+  const dodgeSpeedMultiplierRef = useRef<number>(1.5); // Reduced to 1.5x for slower movement
+  const dodgeDistanceRef = useRef<number>(2.0); // Total distance to move during dodge (in units)
+  const dodgeDirectionRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0, 0)); // Stores the direction of the dodge
+  
+  // Function to trigger dodge - uses the state from component scope
+  const triggerDodge = () => {
+    // Don't allow dodging if already dodging or attacking
+    if (isDodgingRef.current || isAttackingRef.current) return;
+    
+    console.log('Dodge triggered');
+    
+    // Set dodging state
+    isDodgingRef.current = true;
+    dodgeStartTimeRef.current = clockRef.current.getElapsedTime();
+    
+    // Store the direction the character is facing for consistent dodge direction
+    // This ensures the dodge goes in the direction the character is facing when triggered
+    // Use the character's current rotation rather than the camera
+    const characterRotation = window.vibenRingGlobalState.playerRotation;
+    
+    // Create a forward vector and apply character rotation
+    const forwardVector = new THREE.Vector3(0, 0, 1);
+    forwardVector.applyEuler(new THREE.Euler(0, characterRotation.y, 0));
+    forwardVector.normalize();
+    
+    // Store this direction for the duration of the dodge
+    dodgeDirectionRef.current.copy(forwardVector);
+    
+    // Play dodge animation
+    if (mixerRef.current && actionsRef.current.dodge) {
+      // Stop all other animations
+      Object.keys(actionsRef.current).forEach(key => {
+        if (key !== 'dodge') {
+          const action = actionsRef.current[key];
+          if (action && action.isRunning && action.isRunning()) {
+            action.fadeOut(0.1);
+          }
+        }
+      });
+      
+      // Play dodge animation
+      const dodgeAction = actionsRef.current.dodge;
+      dodgeAction.reset();
+      dodgeAction.setLoop(THREE.LoopOnce, 1);
+      dodgeAction.clampWhenFinished = true;
+      dodgeAction.timeScale = 0.8; // Match the user's preferred speed
+      dodgeAction.fadeIn(0.1).play();
+    }
+  };
+  
+  // Function to end dodge
+  const endDodge = () => {
+    if (!isDodgingRef.current) return;
+    
+    console.log('Dodge ended');
+    
+    // Reset dodging state
+    isDodgingRef.current = false;
+    
+    // Return to idle animation
+    if (mixerRef.current && actionsRef.current.idle) {
+      // Fade out dodge animation
+      if (actionsRef.current.dodge && actionsRef.current.dodge.isRunning && actionsRef.current.dodge.isRunning()) {
+        actionsRef.current.dodge.fadeOut(0.2);
+      }
+      
+      // Return to idle animation
+      actionsRef.current.idle.reset().fadeIn(0.2).play();
+    }
+  };
   
   // Handle mouse click for attack animation
   useEffect(() => {
@@ -214,6 +303,9 @@ export function Character() {
     const handleMouseClick = (e: MouseEvent) => {
       // Only process left mouse button (button 0)
       if (e.button !== 0) return;
+      
+      // Don't allow attacking if already attacking or dodging
+      if (isAttackingRef.current || isDodgingRef.current) return;
       
       // Check if attack is in progress or on cooldown
       const now = Date.now();
@@ -423,6 +515,13 @@ export function Character() {
         case 'KeyD':
           movementRef.current.right = true;
           break;
+        // Add Space for dodge/roll
+        case 'Space':
+          // Only trigger dodge if not already dodging
+          if (!isDodgingRef.current && !isAttackingRef.current) {
+            triggerDodge();
+          }
+          break;
         // Add arrow keys as alternatives
         case 'ArrowUp':
           movementRef.current.forward = true;
@@ -492,11 +591,48 @@ export function Character() {
       mixerRef.current.update(safeDelta);
     }
     
-    // Check if we're currently attacking - if so, don't allow movement
+    // Check if we're currently attacking or dodging - if so, handle specially
     const isAttacking = isAttackingRef.current;
+    const isDodging = isDodgingRef.current;
     
-    // Only proceed with movement and animation changes if not attacking
-    if (!isAttacking) {
+    // Handle dodge state
+    if (isDodging) {
+      // Calculate how long we've been dodging
+      const currentTime = clockRef.current.getElapsedTime();
+      const dodgeElapsed = currentTime - dodgeStartTimeRef.current;
+      
+      // Calculate dodge progress (0 to 1)
+      const dodgeProgress = Math.min(dodgeElapsed / dodgeDurationRef.current, 1.0);
+      
+      // Get current position
+      const position = characterRef.current.position.clone();
+      
+      // Calculate dodge movement based on a fixed total distance
+      // This creates a more predictable dodge that always moves the same distance
+      // Use a sine curve for acceleration/deceleration (smooth start and end)
+      const dodgeProgressCurve = Math.sin(dodgeProgress * Math.PI);
+      
+      // Calculate the movement for this frame
+      // We want the total movement over the entire dodge to equal dodgeDistanceRef.current
+      const totalDodgeDistance = dodgeDistanceRef.current;
+      const frameDistance = (totalDodgeDistance / dodgeDurationRef.current) * delta * dodgeProgressCurve;
+      
+      // Create the dodge movement vector using the calculated frame distance
+      const dodgeMovement = dodgeDirectionRef.current.clone().multiplyScalar(frameDistance);
+      characterRef.current.position.add(dodgeMovement);
+      
+      // Update player position in game state to ensure camera follows
+      // This is critical - without this the camera won't follow the character during dodge
+      setPlayerPosition(characterRef.current.position.clone());
+      
+      // If dodge duration is over, end the dodge
+      if (dodgeElapsed >= dodgeDurationRef.current) {
+        endDodge();
+      }
+    }
+    
+    // Only proceed with normal movement and animation changes if not attacking or dodging
+    if (!isAttacking && !isDodging) {
       // Movement speed
       const speed = 5 * delta;
       
@@ -551,42 +687,45 @@ export function Character() {
       const forwardSpeed = speed;            // Normal speed for forward movement
       const backwardSpeed = speed * 0.6;     // 60% speed for backward movement
       const strafeSpeed = speed * 0.7;       // 70% speed for left/right movement
+      // Dodge uses a speed multiplier when active
+      const dodgeMultiplier = isDodging ? dodgeSpeedMultiplierRef.current : 1.0;
       
-      // Get current camera rotation from game state
-      const cameraRotation = state.cameraRotation;
+      // Get current player rotation from game state (controlled by camera)
+      const currentRotation = state.playerRotation;
       
-      // Create movement vector based on input and camera direction
+      // Create movement vector based on input and character direction
       const moveVector = new THREE.Vector3(0, 0, 0);
       
-      // Calculate forward/backward movement (along camera's Z axis)
+      // Calculate forward/backward movement (along character's Z axis)
+      // Only apply normal movement controls if not dodging
+      // (Dodge movement is handled separately in the dodge section)
       if (movementRef.current.forward) {
         const forward = new THREE.Vector3(0, 0, forwardSpeed);
-        forward.applyEuler(new THREE.Euler(0, cameraRotation.y, 0));
+        forward.applyEuler(new THREE.Euler(0, currentRotation.y, 0));
         moveVector.add(forward);
       }
       if (movementRef.current.backward) {
         const backward = new THREE.Vector3(0, 0, -backwardSpeed);
-        backward.applyEuler(new THREE.Euler(0, cameraRotation.y, 0));
+        backward.applyEuler(new THREE.Euler(0, currentRotation.y, 0));
         moveVector.add(backward);
       }
       
-      // Calculate left/right movement (along camera's X axis)
+      // Calculate left/right movement (along character's X axis)
       if (movementRef.current.left) {
         const left = new THREE.Vector3(strafeSpeed, 0, 0);
-        left.applyEuler(new THREE.Euler(0, cameraRotation.y, 0));
+        left.applyEuler(new THREE.Euler(0, currentRotation.y, 0));
         moveVector.add(left);
       }
       if (movementRef.current.right) {
         const right = new THREE.Vector3(-strafeSpeed, 0, 0);
-        right.applyEuler(new THREE.Euler(0, cameraRotation.y, 0));
+        right.applyEuler(new THREE.Euler(0, currentRotation.y, 0));
         moveVector.add(right);
       }
       
       // Apply movement vector to position
       position.add(moveVector);
       
-      // Get the current player rotation from game state (controlled by camera)
-      const currentRotation = state.playerRotation;
+      // We already have the current player rotation from above
       
       // Update character model rotation to match the game state rotation
       // This ensures the character faces the direction the camera is pointing
