@@ -217,7 +217,7 @@ export function Boss() {
         const bossAttackSpherePosition = new THREE.Vector3(
           window.vibenRingGlobalState.bossPosition.x + bossAttackOffset.x,
           window.vibenRingGlobalState.bossPosition.y + bossAttackOffset.y,
-          window.vibenRingGlobalState.bossPosition.z + bossAttackOffset.z
+          window.vibenRingGlobalState.bossPosition.z - bossAttackOffset.z
         );
         
         const playerCollisionSpherePosition = new THREE.Vector3(
@@ -241,47 +241,6 @@ export function Boss() {
           console.log(`Boss attack hit! Collision detected. Player HP: ${newPlayerHp}`);
         } else if (window.vibenRingGlobalState.playerHp > 0) {
           console.log('Boss attack missed - no collision detected');
-        }
-      } else {
-        // Fallback to React state if global state is not available
-        console.log('Global state not available, using React state for collision detection');
-        
-        // Get the latest state
-        const currentState = state;
-        
-        // Calculate the boss attack sphere position based on boss rotation
-        const bossAttackOffset = new THREE.Vector3().copy(currentState.bossAttackSphereOffset);
-        const bossRotationMatrix = new THREE.Matrix4().makeRotationFromEuler(currentState.bossRotation);
-        bossAttackOffset.applyMatrix4(bossRotationMatrix);
-        
-        // Calculate final sphere positions
-        const bossAttackSpherePosition = new THREE.Vector3(
-          currentState.bossPosition.x + bossAttackOffset.x,
-          currentState.bossPosition.y + bossAttackOffset.y,
-          currentState.bossPosition.z + bossAttackOffset.z
-        );
-        
-        const playerCollisionSpherePosition = new THREE.Vector3(
-          currentState.playerPosition.x + currentState.playerCollisionSphereOffset.x,
-          currentState.playerPosition.y + currentState.playerCollisionSphereOffset.y,
-          currentState.playerPosition.z + currentState.playerCollisionSphereOffset.z
-        );
-        
-        // Check for collision between boss attack sphere and player collision sphere
-        const collision = didSpheresCollide(
-          bossAttackSpherePosition,
-          currentState.bossAttackSphereRadius,
-          playerCollisionSpherePosition,
-          currentState.playerCollisionSphereRadius
-        );
-        
-        // Apply damage only if there's a collision and player is still alive
-        if (collision && currentState.playerHp > 0) {
-          const newPlayerHp = Math.max(0, currentState.playerHp - ATTACK_DAMAGE);
-          setPlayerHp(newPlayerHp);
-          console.log(`Boss attack hit! Collision detected. Player HP: ${newPlayerHp}`);
-        } else if (currentState.playerHp > 0) {
-          console.log('Boss attack missed - no collision detection');
         }
       }
     }, 1200);
