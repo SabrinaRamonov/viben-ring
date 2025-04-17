@@ -106,9 +106,16 @@ export function ThirdPersonCamera() {
     setCameraRotation(cameraRotation);
     
     // Calculate camera position based on player position and offset
-    // Rotate the offset based on camera rotation
+    // Rotate the offset based on camera rotation - apply both pitch and yaw
     const offset = new THREE.Vector3().copy(state.cameraOffset);
-    offset.applyEuler(new THREE.Euler(0, cameraRotation.y, 0)); // Only apply yaw rotation to offset
+    
+    // First apply yaw (horizontal rotation)
+    offset.applyEuler(new THREE.Euler(0, cameraRotation.y, 0));
+    
+    // Then apply a modified pitch (vertical rotation) to the offset
+    // We don't want to fully rotate the offset with pitch as that would be disorienting
+    // Instead, we'll adjust the vertical position based on pitch
+    offset.y += Math.sin(-cameraRotation.x) * 2.0; // Adjust height based on pitch
     
     // Perform collision detection for camera (simplified version)
     // This prevents the camera from going through walls or objects
@@ -120,7 +127,10 @@ export function ThirdPersonCamera() {
     // Calculate look-at point (slightly ahead of player) - Elden Ring style
     // The look-at point should be at the character's upper back/head level and in front
     const lookAtOffset = new THREE.Vector3(0, 1.0, 2); // Look at point above and in front of player
-    lookAtOffset.applyEuler(new THREE.Euler(0, cameraRotation.y, 0)); // Rotate based on camera yaw
+    
+    // Apply both pitch and yaw to the look-at point for proper vertical camera movement
+    // This makes the camera look up/down when the mouse moves vertically
+    lookAtOffset.applyEuler(new THREE.Euler(-cameraRotation.x * 0.5, cameraRotation.y, 0));
     const lookAtPoint = new THREE.Vector3().addVectors(state.playerPosition, lookAtOffset);
     
     // Update camera position and look-at point
