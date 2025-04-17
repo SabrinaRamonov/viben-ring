@@ -20,6 +20,7 @@ declare global {
       bossAttackSphereOffset: THREE.Vector3;
       bossAttackSphereRadius: number;
       playerHp: number;
+      playerStamina: number;
       bossHp: number;
       // Camera parameters
       cameraOffset: THREE.Vector3;
@@ -124,6 +125,7 @@ export function GameStateProvider({ children }: { children: ReactNode }) {
         playerRotation: new THREE.Euler(),
         playerCollisionSphereOffset: new THREE.Vector3(),
         playerCollisionSphereRadius: defaultGameState.playerCollisionSphereRadius,
+        playerStamina: defaultGameState.playerStamina,
         playerAttackSphereOffset: new THREE.Vector3(),
         playerAttackSphereRadius: defaultGameState.playerAttackSphereRadius,
         bossPosition: new THREE.Vector3(),
@@ -170,7 +172,14 @@ export function GameStateProvider({ children }: { children: ReactNode }) {
   };
 
   const setPlayerStamina = (stamina: number) => {
-    setState(prev => ({ ...prev, playerStamina: stamina }));
+    // Clamp stamina between 0 and 100
+    const clampedStamina = Math.max(0, Math.min(100, stamina));
+    
+    // Update both React state and global state
+    setState(prev => ({ ...prev, playerStamina: clampedStamina }));
+    if (typeof window !== 'undefined' && window.vibenRingGlobalState) {
+      window.vibenRingGlobalState.playerStamina = clampedStamina;
+    }
   };
 
   const setPlayerPosition = (position: THREE.Vector3) => {

@@ -57,7 +57,7 @@ function loadAnimation(url: string): Promise<THREE.AnimationClip> {
 }
 
 export function Character() {
-  const { state, setPlayerPosition, setPlayerRotation, applyDmgToBoss } = useGameState();
+  const { state, setPlayerPosition, setPlayerRotation, applyDmgToBoss, setPlayerStamina } = useGameState();
   const characterRef = useRef<THREE.Group>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const clockRef = useRef<THREE.Clock>(new THREE.Clock());
@@ -221,10 +221,32 @@ export function Character() {
   const dodgeDistanceRef = useRef<number>(2.0); // Total distance to move during dodge (in units)
   const dodgeDirectionRef = useRef<THREE.Vector3>(new THREE.Vector3(0, 0, 0)); // Stores the direction of the dodge
   
+  // Stamina system constants
+  const LIGHT_ATTACK_STAMINA_COST = 20;  // Stamina cost for light attack
+  const DODGE_STAMINA_COST = 35;         // Stamina cost for dodge
+  const STAMINA_REGEN_RATE = 20;         // Stamina regeneration per second
+  const STAMINA_REGEN_DELAY = 2.0;       // Delay in seconds before stamina starts regenerating
+  const lastStaminaUseTimeRef = useRef<number>(0); // Track when stamina was last used
+  
   // Function to trigger dodge - uses the state from component scope
   const triggerDodge = () => {
     // Don't allow dodging if already dodging or attacking
     if (isDodgingRef.current || isAttackingRef.current) return;
+
+    const state = window.vibenRingGlobalState;
+    
+    // Check if player has enough stamina to dodge
+    if (state.playerStamina < DODGE_STAMINA_COST) {
+      console.log('Not enough stamina to dodge!');
+      return;
+    }
+    
+    // Consume stamina for dodge
+    setPlayerStamina(state.playerStamina - DODGE_STAMINA_COST);
+    window.vibenRingGlobalState.playerStamina = state.playerStamina - DODGE_STAMINA_COST;
+    
+    // Update last stamina use time
+    lastStaminaUseTimeRef.current = clockRef.current.getElapsedTime();
     
     console.log('Dodge triggered');
     
@@ -310,9 +332,26 @@ export function Character() {
       // Check if attack is in progress or on cooldown
       const now = Date.now();
       if (isAttackingRef.current || 
-          now - lastAttackTimeRef.current < ATTACK_COOLDOWN || 
+          (lastAttackTimeRef.current > 0 && now - lastAttackTimeRef.current < ATTACK_COOLDOWN) ||
           !mixerRef.current || 
-          !actionsRef.current.attack) return;
+          !actionsRef.current.attack) {
+        return;
+      }
+
+      const state = window.vibenRingGlobalState;
+      
+      // Check if player has enough stamina to attack
+      if (state.playerStamina < LIGHT_ATTACK_STAMINA_COST) {
+        console.log('Not enough stamina to attack!');
+        return;
+      }
+      
+      // Consume stamina for attack
+      setPlayerStamina(state.playerStamina - LIGHT_ATTACK_STAMINA_COST);
+      window.vibenRingGlobalState.playerStamina = state.playerStamina - LIGHT_ATTACK_STAMINA_COST;
+      
+      // Update last stamina use time
+      lastStaminaUseTimeRef.current = clockRef.current.getElapsedTime();
       
       console.log('Attack animation triggered');
       isAttackingRef.current = true;
@@ -501,6 +540,7 @@ export function Character() {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Log key presses for debugging
       console.log('Key down:', e.code);
+      console.log('Current movement state before keydown:', { ...movementRef.current });
       
       switch (e.code) {
         case 'KeyW':
@@ -539,6 +579,8 @@ export function Character() {
     };
     
     const handleKeyUp = (e: KeyboardEvent) => {
+      console.log('Key up:', e.code);
+      console.log('Current movement state before keyup:', { ...movementRef.current });
       switch (e.code) {
         case 'KeyW':
           movementRef.current.forward = false;
@@ -589,6 +631,19 @@ export function Character() {
       // Make sure we're updating with a reasonable delta time
       const safeDelta = Math.min(delta, 0.1); // Cap at 100ms to prevent huge jumps
       mixerRef.current.update(safeDelta);
+    }
+    
+    // Handle stamina regeneration
+    const currentTime = clockRef.current.getElapsedTime();
+    const timeSinceLastStaminaUse = currentTime - lastStaminaUseTimeRef.current;
+    
+    // Only regenerate stamina if enough time has passed since last stamina use
+    if (timeSinceLastStaminaUse > STAMINA_REGEN_DELAY && state.playerStamina < 100) {
+      // Calculate stamina regeneration for this frame
+      const staminaRegenThisFrame = STAMINA_REGEN_RATE * delta;
+      
+      // Update stamina
+      setPlayerStamina(state.playerStamina + staminaRegenThisFrame);
     }
     
     // Check if we're currently attacking or dodging - if so, handle specially
@@ -696,15 +751,25 @@ export function Character() {
       // Create movement vector based on input and character direction
       const moveVector = new THREE.Vector3(0, 0, 0);
       
+      // Debug movement state
+      console.log('Movement state:', {
+        forward: movementRef.current.forward,
+        backward: movementRef.current.backward,
+        left: movementRef.current.left,
+        right: movementRef.current.right
+      });
+      
       // Calculate forward/backward movement (along character's Z axis)
       // Only apply normal movement controls if not dodging
       // (Dodge movement is handled separately in the dodge section)
       if (movementRef.current.forward) {
+        console.log('Moving forward');
         const forward = new THREE.Vector3(0, 0, forwardSpeed);
         forward.applyEuler(new THREE.Euler(0, currentRotation.y, 0));
         moveVector.add(forward);
       }
       if (movementRef.current.backward) {
+        console.log('Moving backward');
         const backward = new THREE.Vector3(0, 0, -backwardSpeed);
         backward.applyEuler(new THREE.Euler(0, currentRotation.y, 0));
         moveVector.add(backward);
@@ -712,11 +777,13 @@ export function Character() {
       
       // Calculate left/right movement (along character's X axis)
       if (movementRef.current.left) {
+        console.log('Moving left');
         const left = new THREE.Vector3(strafeSpeed, 0, 0);
         left.applyEuler(new THREE.Euler(0, currentRotation.y, 0));
         moveVector.add(left);
       }
       if (movementRef.current.right) {
+        console.log('Moving right');
         const right = new THREE.Vector3(-strafeSpeed, 0, 0);
         right.applyEuler(new THREE.Euler(0, currentRotation.y, 0));
         moveVector.add(right);
@@ -724,6 +791,11 @@ export function Character() {
       
       // Apply movement vector to position
       position.add(moveVector);
+      
+      // Debug final movement vector
+      if (moveVector.length() > 0) {
+        console.log('Applied movement vector:', moveVector);
+      }
       
       // We already have the current player rotation from above
       
